@@ -44,8 +44,7 @@ type Clients struct {
 type ChartChangeSync struct {
 	logger log.Logger
 	Polling
-	kubeClient          kubernetes.Clientset
-	ifClient            ifclientset.Clientset
+	Clients
 	release             *chartrelease.Release
 	relsync             releasesync.ReleaseChangeSync
 	lastCheckedRevision string
@@ -68,8 +67,7 @@ func New(
 	return &ChartChangeSync{
 		logger:              logger,
 		Polling:             polling,
-		kubeClient:          clients.KubeClient,
-		ifClient:            clients.IfClient,
+		Clients:             clients,
 		release:             release,
 		relsync:             relsync,
 		lastCheckedRevision: lastCheckedRevision,
@@ -91,7 +89,7 @@ func (chs *ChartChangeSync) Run(stopCh <-chan struct{}, errc chan error, wg *syn
 		for {
 			select {
 			case <-ticker.C:
-				ns, err := GetNamespaces(chs.logger, chs.kubeClient)
+				ns, err := GetNamespaces(chs.logger, chs.Clients.KubeClient)
 				if err != nil {
 					errc <- err
 				}
@@ -112,7 +110,7 @@ func (chs *ChartChangeSync) Run(stopCh <-chan struct{}, errc chan error, wg *syn
 
 				// Syncing manual Chart releases
 				chs.logger.Log("info", fmt.Sprint("Start of releasesync"))
-				syncNeeded, err = chs.relsync.DoReleaseChangeSync(chs.ifClient, ns)
+				syncNeeded, err = chs.relsync.DoReleaseChangeSync(chs.Clients.IfClient, ns)
 				if err != nil {
 					chs.logger.Log("error", fmt.Sprintf("Failure to do manual release sync: %#v", err))
 					chs.logger.Log("info", fmt.Sprint("End of releasesync"))
@@ -287,7 +285,7 @@ func (chs *ChartChangeSync) getCustomResources(namespaces []string, chart string
 
 	fhrs := []ifv1.FluxHelmRelease{}
 	for _, ns := range namespaces {
-		list, err := chs.ifClient.HelmV1alpha().FluxHelmReleases(ns).List(listOptions)
+		list, err := chs.Clients.IfClient.HelmV1alpha().FluxHelmReleases(ns).List(listOptions)
 		if err != nil {
 			chs.logger.Log("error", fmt.Errorf("Failure while retrieving FluxHelmReleases: %#v", err))
 			continue
