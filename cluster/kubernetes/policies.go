@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	ifv1 "github.com/weaveworks/flux/apis/helm.integrations.flux.weave.works/v1alpha"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/weaveworks/flux"
@@ -122,6 +123,7 @@ type Manifest struct {
 				} `yaml:"template"`
 			} `yaml:"spec"`
 		} `yaml:"jobTemplate"`
+		ifv1.FluxHelmReleaseSpec
 	} `yaml:"spec"`
 }
 
