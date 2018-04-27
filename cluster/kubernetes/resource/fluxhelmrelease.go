@@ -16,20 +16,20 @@ type FluxHelmRelease struct {
 
 func (fhr FluxHelmRelease) Containers() []resource.Container {
 	// process the Spec.Values section and construct containers
-	containers, err := createContainers(fhr)
+	containers, err := CreateContainers(fhr)
 	if err != nil {
 		// log ?
 	}
 	return containers
 }
 
-func createContainers(fhr FluxHelmRelease) ([]resource.Container, error) {
-	values := fhr.Spec.Values
-	if len(values) == 0 {
-		return nil, nil
-	}
+func CreateContainers(fhr FluxHelmRelease) ([]resource.Container, error) {
 	containers := []resource.Container{}
 
+	values := fhr.Spec.Values
+	if len(values) == 0 {
+		return containers, nil
+	}
 	imgInfo, ok := values["image"]
 
 	// image info appears on the top level, so is associated directly with the chart

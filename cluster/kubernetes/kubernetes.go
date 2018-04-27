@@ -22,6 +22,7 @@ import (
 	"github.com/weaveworks/flux"
 	"github.com/weaveworks/flux/cluster"
 	"github.com/weaveworks/flux/image"
+	ifclient "github.com/weaveworks/flux/integrations/client/clientset/versioned"
 	"github.com/weaveworks/flux/registry"
 	"github.com/weaveworks/flux/resource"
 	"github.com/weaveworks/flux/ssh"
@@ -39,6 +40,7 @@ type extendedClient struct {
 	v1beta1extensions.ExtensionsV1beta1Interface
 	v1beta1apps.StatefulSetsGetter
 	v1beta1batch.CronJobsGetter
+	ifclient.Interface
 }
 
 // --- internal types for keeping track of syncing
@@ -131,6 +133,7 @@ type Cluster struct {
 
 // NewCluster returns a usable cluster.
 func NewCluster(clientset k8sclient.Interface,
+	ifclientset ifclient.Interface,
 	applier Applier,
 	sshKeyRing ssh.KeyRing,
 	logger log.Logger) *Cluster {
@@ -142,6 +145,7 @@ func NewCluster(clientset k8sclient.Interface,
 			clientset.Extensions(),
 			clientset.AppsV1beta1(),
 			clientset.BatchV1beta1(),
+			ifclientset,
 		},
 		applier:    applier,
 		logger:     logger,

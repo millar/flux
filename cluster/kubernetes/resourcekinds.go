@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"fmt"
 
+	ifv1 "github.com/weaveworks/flux/apis/helm.integrations.flux.weave.works/v1alpha"
 	apiapps "k8s.io/api/apps/v1beta1"
 	apibatch "k8s.io/api/batch/v1beta1"
 	apiv1 "k8s.io/api/core/v1"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/weaveworks/flux"
 	"github.com/weaveworks/flux/cluster"
+	k8sresource "github.com/weaveworks/flux/cluster/kubernetes/resource"
 	"github.com/weaveworks/flux/image"
 	"github.com/weaveworks/flux/resource"
 )
@@ -32,6 +34,7 @@ func init() {
 	resourceKinds["daemonset"] = &daemonSetKind{}
 	resourceKinds["deployment"] = &deploymentKind{}
 	resourceKinds["statefulset"] = &statefulSetKind{}
+	resourceKinds["fluxhelmrelease"] = &fluxHelmReleaseKind{}
 }
 
 type podController struct {
@@ -266,6 +269,100 @@ func makeCronJobPodController(cronJob *apibatch.CronJob) podController {
 		status:      StatusReady,
 		podTemplate: cronJob.Spec.JobTemplate.Spec.Template,
 		apiObject:   cronJob}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// helm.integrations.flux.weave.works/v1alpha FluxHelmRelease
+//		Custom Resource for helm integration
+
+type fluxHelmReleaseKind struct{}
+
+func (fhr *fluxHelmReleaseKind) getPodController(c *Cluster, namespace, name string) (podController, error) {
+	//deployment, err := c.client.Deployments(namespace).Get(name, meta_v1.GetOptions{})
+	fluxhelmrelease, err := c.client.HelmV1alpha().FluxHelmReleases(namespace).Get(name, meta_v1.GetOptions{})
+	if err != nil {
+		return podController{}, err
+	}
+
+	return makeFluxHelmReleasePodController(fluxhelmrelease), nil
+}
+
+func (fhr *fluxHelmReleaseKind) getPodControllers(c *Cluster, namespace string) ([]podController, error) {
+	fluxhelmreleases, err := c.client.HelmV1alpha().FluxHelmReleases(namespace).List(meta_v1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	var podControllers []podController
+	for i := range fluxhelmreleases.Items {
+		podControllers = append(podControllers, makeFluxHelmReleasePodController(&fluxhelmreleases.Items[i]))
+	}
+
+	return podControllers, nil
+}
+
+func makeFluxHelmReleasePodController(fhr *ifv1.FluxHelmRelease) podController {
+	// ? Does status need to be added and considered ?
+
+	podSpecTemplate := makeFluxHelmReleasePodTemplate(fhr)
+
+	return podController{
+		apiVersion:  "helm.integrations.flux.weave.works/v1alpha",
+		kind:        "FluxHelmRelease",
+		name:        fhr.ObjectMeta.Name,
+		status:      StatusReady,
+		podTemplate: podSpecTemplate,
+		apiObject:   fhr}
+}
+
+func makeFluxHelmReleasePodTemplate(fhr *ifv1.FluxHelmRelease) apiv1.PodTemplateSpec {
+	pts := apiv1.PodTemplateSpec{}
+	if fhr == nil {
+		return pts
+	}
+
+	resFhr := k8sresource.FluxHelmRelease{Spec: fhr.Spec}
+	pts.ObjectMeta = fhr.ObjectMeta
+	containers := resFhr.Containers()
+	//k8scontainers := apiv1.PodSpec{Containers: []apiv1.Container{}}
+	k8scontainers := createK8sContainers(containers)
+
+	pts.Spec = apiv1.PodSpec{Containers: k8scontainers}
+
+	return pts
+}
+
+func createK8sContainers(containers []resource.Container) []apiv1.Container {
+	k8scontainers := []apiv1.Container{}
+
+	if len(containers) == 0 {
+		return k8scontainers
+	}
+
+	for _, c := range containers {
+		cImage := c.Image
+		tag := cImage.Tag
+		name := cImage.Name
+
+		domain := name.Domain
+		image := name.Image
+
+		var concatImage string
+
+		switch tag {
+		case "":
+			concatImage = image
+		default:
+			concatImage = fmt.Sprintf("%s/%s", domain, image)
+		}
+
+		if tag != "" {
+			concatImage = fmt.Sprintf("%s:%s", concatImage, tag)
+		}
+		k8scontainers = append(k8scontainers, apiv1.Container{Name: c.Name, Image: concatImage})
+	}
+
+	return k8scontainers
 }
 
 /////////////////////////////////////////////////////////////////////////////
